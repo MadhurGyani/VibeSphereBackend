@@ -1,7 +1,7 @@
 import cors from "cors";
 const app = express();
 
-const allowedOrigins = [process.env.CORS_ORIGIN || 'https://your-netlify-domain.netlify.app'];
+const allowedOrigins = [ 'https://vibesphere.netlify.app/'];
 
 const corsOptions = {
   origin: function (origin, callback) {
