@@ -5,6 +5,7 @@ import { Client, Users, Databases } from 'node-appwrite';
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
 const client = new Client();
+
 client
   .setEndpoint(process.env.APPWRITE_ENDPOINT)
   .setProject(process.env.APPWRITE_PROJECT_ID)
@@ -16,13 +17,17 @@ const databases = new Databases(client);
 const createPayment = asyncHandler(async (req, res) => {
   const { product, token, userId } = req.body;
   const idempotencyKey = uuidv4();
-console.log(userId);
+// console.log(product);
+// console.log(token);
+// console.log(userId);
   try {
+    // Create Stripe customer
     const customer = await stripe.customers.create({
       email: token.email,
       source: token.id,
     });
 
+    // Create Stripe charge
     const charge = await stripe.charges.create(
       {
         amount: product.price * 100,
@@ -51,16 +56,15 @@ console.log(userId);
     );
 
     // Update user in Appwrite
-    const result = await databases.updateDocument(
-      process.env.APPWRITE_DATABASE_ID, // databaseId
-process.env.APPWRITE_USERS_COLLECTION_ID, // collectionId
-      userId, // documentId
+    const updatedUser = await databases.updateDocument(
+      process.env.APPWRITE_DATABASE_ID,
+      process.env.APPWRITE_USERS_COLLECTION_ID,
+      userId,
       {
-        royal:true,
-      }, // data (optional)
-  );
-  
-console.log(result);
+        royal: true,
+      }
+    );
+
     res.status(200).json(charge);
   } catch (error) {
     console.error('Error processing payment:', error);
