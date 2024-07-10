@@ -18,9 +18,11 @@ app.use(express.json());
 
 import express from "express";
 import paymentRoutes from "./routes/payment.router.js";
+import uploadRoutes from "./routes/upload.router.js";
 
 app.use(express.json());
 
 app.use("/api/v1/payment", paymentRoutes);
+app.use("/api/v1/upload", uploadRoutes);
 
 export { app };

@@ -1,5 +1,5 @@
 // /database/appwriteDatabase.js
-import { Client, Databases } from 'node-appwrite';
+import { Client, Databases,Users } from 'node-appwrite';
 
 const client = new Client();
 client
@@ -7,16 +7,11 @@ client
   .setProject(process.env.APPWRITE_PROJECT_ID) // Your Appwrite Project ID
   .setKey(process.env.APPWRITE_API_KEY); // Your Appwrite API Key
 
-const database = new Databases(client);
+const users = new Users(client);
+const databases = new Databases(client);
+const storage = new Storage(client);
 
-export const saveTransaction = async (userId, expiresAt) => {
-  try {
-    const response = await database.createDocument('transactions', 'unique()', {
-      userId: userId,
-      expiresAt: expiresAt,
-    });
-    return response;
-  } catch (error) {
-    throw new Error('Error saving transaction: ' + error.message);
-  }
-};
+export {users,databases,storage}
+
+
+

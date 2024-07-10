@@ -1,18 +1,9 @@
 import Stripe from 'stripe';
 import { asyncHandler } from "../utils/asyncHandler.js";
 import { v4 as uuidv4 } from 'uuid';
-import { Client, Users, Databases } from 'node-appwrite';
-
+import {  databases } from '../db/index.js';
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
-const client = new Client();
 
-client
-  .setEndpoint(process.env.APPWRITE_ENDPOINT)
-  .setProject(process.env.APPWRITE_PROJECT_ID)
-  .setKey(process.env.APPWRITE_API_KEY);
-
-const users = new Users(client);
-const databases = new Databases(client);
 
 const createPayment = asyncHandler(async (req, res) => {
   const { product, token, userId } = req.body;
