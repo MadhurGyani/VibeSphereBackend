@@ -5,7 +5,6 @@ import { upload } from '../middlewares/multer.middleware.js';
 
 const router = express.Router();
 
-router.route('/api/v1/uploads').post( upload.single('video'), uploader);
-
+router.route('/uploader').post( upload.single('video'), uploader);
 
 export default router;
