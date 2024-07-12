@@ -1,95 +1,101 @@
-import express from 'express';
-import { exec } from 'child_process';
-import fs from 'fs';
-import path from 'path';
-import { storage} from '../db/index.js';
-import { asyncHandler } from '../utils/asyncHandler.js';
-import { v4 as uuidv4 } from 'uuid';
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+import { asyncHandler } from "../utils/asyncHandler.js";
+import { v4 as uuidv4 } from "uuid";
+import { uploadOnCloudinary } from "../utils/cloudinary.js";
+import { m3u8Genrator, uploadM3U8File } from "../utils/m3u8Handler.js";
 
-const router = express.Router();
+const readM3U8File = (filePath) => {
+  return fs.readFileSync(filePath, "utf8");
+};
 
 // Handler function for uploading and processing videos
 const uploader = asyncHandler(async (req, res) => {
-    const videoPath = req.file?.path;
+  const videoPath = req.file?.path;
 
-    if (!videoPath) {
-        throw new ApiError(400, "Video file is missing");
+  if (!videoPath) {
+    throw new ApiError(400, "Video file is missing");
+  }
+  console.log(videoPath);
+  const videoId = uuidv4();
+  const outputPath = `./uploads/${videoId}`;
+  const hlsPath = `${outputPath}/index.m3u8`;
+
+  // Ensure the output directory exists
+  if (!fs.existsSync(outputPath)) {
+    fs.mkdirSync(outputPath, { recursive: true });
+  }
+
+  // Adjust the path to FFmpeg executable as necessary
+  const ffmpegPath = "C:/ffmpeg/ffmpeg";
+
+  // Convert the video to HLS format
+  const command = `${ffmpegPath} -i "${videoPath}" -codec:v libx264 -codec:a aac -hls_time 10 -hls_playlist_type vod -hls_segment_filename "${outputPath}/segment%03d.ts" -start_number 0 ${hlsPath}`;
+
+  exec(command, async (error, stdout, stderr) => {
+    if (error) {
+      console.error(`exec error: ${error}`);
+      return res.status(500).send("Error converting video to HLS format");
     }
+    let files = [];
 
-    const vedioId = uuidv4();
-    const outputPath = `./uploads/${vedioId}`;
-    const hlsPath = `${outputPath}/index.m3u8`;
+    console.log(`stdout: ${stdout}`);
+    console.log(`stderr: ${stderr}`);
 
-    // Ensure the output directory exists
-    if (!fs.existsSync(outputPath)) {
-        fs.mkdirSync(outputPath, { recursive: true });
-    }
+    try {
+      // Upload the HLS files to Appwrite storage
+      files = fs.readdirSync(outputPath);
+      files = files.filter(function(item) {
+        return item !== "index.m3u8"
+    })
+      const urls = [];
+      console.log(files);
+      for (const file of files) {
+        const filePath = path.join(outputPath, file);
+        //console.log(`path>>>> ${filePath}`);
+        const response = await uploadOnCloudinary(filePath,0);
 
-    // Adjust the path to FFmpeg executable as necessary
-    const ffmpegPath = 'C:/ffmpeg/ffmpeg';
-
-    // Convert the video to HLS format
-    const command = `${ffmpegPath} -i "${videoPath}" -codec:v libx264 -codec:a aac -hls_time 10 -hls_playlist_type vod -hls_segment_filename "${outputPath}/segment%03d.ts" -start_number 0 ${hlsPath}`;
-
-    exec(command, async (error, stdout, stderr) => {
-        if (error) {
-            console.error(`exec error: ${error}`);
-            return res.status(500).send('Error converting video to HLS format');
+        if (response && response.secure_url) {
+          urls.push(response.secure_url);
+        } else {
+          console.error("Invalid response:", response);
         }
+      }
+      const filePath = path.join(outputPath,"index.m3u8");
 
-        console.log(`stdout: ${stdout}`);
-        console.log(`stderr: ${stderr}`);
+      m3u8Genrator(filePath,urls);
 
-        try {
-            // Upload the HLS files to Appwrite storage
-            const files = fs.readdirSync(outputPath);
-            const urls = [];
-            console.log(files);
-            for (const file of files) {
-                console.log(file);
+      const response = await uploadM3U8File(filePath);
+      console.log(response);
+      
+      const m3u8FileUrl = `${process.env.APPWRITE_ENDPOINT}/storage/buckets/${process.env.APPWRITE_BUCKET_ID}/files/${m3u8FileResponse.$id}/view`;
 
-                const filePath = path.join(outputPath, file);
-                console.log(filePath); // Verify the filePath
 
-                const response = await storage.createFile(process.env.APPWRITE_STORAGE_ID, uuidv4(), fs.createReadStream(filePath));
-                
-                // Ensure response is defined and contains 'href'
-                if (response && response.href) {
-                    console.log(response);
-                    urls.push(response.href);
-                } else {
-                    console.error('Invalid response:', response);
-                    // Handle this error condition as needed
-                }
-            }
+      // Respond with the URL to the client
+      res.status(200).send({m3u8FileUrl});
+    } catch (uploadError) {
+      console.error("Error uploading files:", uploadError);
+      res.status(500).send("Error uploading files");
+    } finally {
+      // Clean up the temporary files if needed
+      fs.unlinkSync(videoPath); // Remove the original video file
 
-            // Store the URL of the M3U8 file in Appwrite database
-            const m3u8Url = urls.find(url => url.endsWith('.m3u8'));
+      // List all files in the outputPath
+      const outputFiles = fs.readdirSync(outputPath);
 
-            // Respond with the URL to the client
-            res.status(200).send({ m3u8Url });
-        } catch (uploadError) {
-            console.error('Error uploading files:', uploadError);
-            res.status(500).send('Error uploading files');
-        } finally {
-           // Clean up the temporary files if needed
-    fs.unlinkSync(videoPath); // Remove the original video file
-
-    // List all files in the outputPath
-    const files = fs.readdirSync(outputPath);
-
-    if (files.length > 0) {
+      if (outputFiles.length > 1) {
         // Remove each file in the outputPath
-        files.forEach(file => {
-            const filePath = path.join(outputPath, file);
-            fs.unlinkSync(filePath);
+        outputFiles.forEach((file) => {
+          const filePath = path.join(outputPath, file);
+          fs.unlinkSync(filePath);
         });
-    }
+      }
 
-    // Remove the outputPath directory itself
-    fs.rmdirSync(outputPath);
-        }
-    });
+      // Remove the outputPath directory itself
+      //fs.rmdirSync(outputPath);
+    }
+  });
 });
 
 // Define the route and use the upload middleware

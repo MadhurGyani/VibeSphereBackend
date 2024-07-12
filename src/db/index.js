@@ -1,5 +1,5 @@
 // /database/appwriteDatabase.js
-import { Client, Databases,Users,Storage } from 'node-appwrite';
+import { Client, Databases,Users,Storage, } from 'node-appwrite';
 
 const client = new Client();
 client
